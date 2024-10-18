@@ -16,6 +16,9 @@ updated_at = Annotated[datetime.datetime, mapped_column(
     )]
 
 class WorkersOrm(Base):
+    """
+    Таблица workers
+    """
     __tablename__ = "workers"
 
     id: Mapped[intpk]
@@ -23,19 +26,28 @@ class WorkersOrm(Base):
 
 
 class Workload(enum.Enum):
-    parttime = "parttime"
-    fulltime = "fulltime"
+    """
+    Класс-тип рабочего времени
+    """
+    parttime = "parttime"   # частичная занятость
+    fulltime = "fulltime"   # полная занятость
 
 class ResumesOrm(Base):
+    """
+    Таблица resumes
+    """
     __tablename__ = "resumes"
 
-    id: Mapped[intpk]
-    title: Mapped[str]
-    compensation: Mapped[int | None]
-    workload: Mapped[Workload]
-    worker_id: Mapped[int] = mapped_column(ForeignKey("workers.id", ondelete="CASCADE"))
-    created_at: Mapped[created_at] 
-    updated_at: Mapped[updated_at]
+    # столбцы
+    id: Mapped[intpk]  # id резюме, primary key
+    title: Mapped[str]  # заголовок резюме
+    compensation: Mapped[int | None]  # зарплата, может быть None
+    workload: Mapped[Workload]  # тип занятости
+    worker_id: Mapped[int] = mapped_column(             # id работника, для которого это резюме
+        ForeignKey("workers.id", ondelete="CASCADE")    # foreign key, связанный с workers.id
+    )
+    created_at: Mapped[created_at]  # дата создания
+    updated_at: Mapped[updated_at]  # дата обновления
 
 
 

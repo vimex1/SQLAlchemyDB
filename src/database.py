@@ -20,9 +20,13 @@ async_engine = create_async_engine(
 session_factory = sessionmaker(sync_engine)
 async_session_factory = async_sessionmaker(async_engine)
 
-str_256 = Annotated[str, 256]
 
+
+str_256 = Annotated[str, 256]   # создаем тип аннотацию str_256, она будет заменяться на sqlalchemy.String(256)
+
+# создаем базовый класс для моделей, он будет наследоваться от DeclarativeBase
 class Base(DeclarativeBase):
+    # создаем тип аннотацию, которая будет заменяться на sqlalchemy.String(256)
     type_annotation_map = {
         str_256: String(256)
     }
