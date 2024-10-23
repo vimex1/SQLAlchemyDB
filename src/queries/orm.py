@@ -1,4 +1,5 @@
 from sqlalchemy import text, insert, inspect, select, func, cast, Integer, and_
+from sqlalchemy.orm import aliased, joinedload, selectinload, contains_eager
 from database import sync_engine, async_engine, session_factory, async_session_factory, Base
 from models import WorkersOrm, workers_table, ResumesOrm, Workload
 
@@ -8,7 +9,7 @@ from models import WorkersOrm, workers_table, ResumesOrm, Workload
 #     Base.metadata.create_all(sync_engine)
 #     sync_engine.echo = True
 
-# Асинхронный вариант, не показанный в видео
+# Асинхронный вариант
 # async def create_tables():
 #    async with async_engine.begin() as conn:
 #        await conn.run_sync(Base.metadata.drop_all)
@@ -111,3 +112,190 @@ class SyncORM:
             result = res.all()
 
             print(f"\nРезультат: {result[0].avg_compensation}")
+
+    @staticmethod
+    def insert_additional_resumes():
+        with session_factory() as session:
+            workers = [
+                {"username": "Artem"},
+                {"username": "Roman"},
+                {"username": "Petr"},
+            ]
+            resumes = [
+                {"title": "Python Analyst", "compensation": 90000, "workload": Workload.parttime, "worker_id": 3},
+                {"title": "Python Senior Developer", "compensation": 500000, "workload": Workload.fulltime, "worker_id": 3},
+                {"title": "Machine Learning Engineer", "compensation": 160000, "workload": Workload.fulltime, "worker_id": 4},
+                {"title": "DevOps Engineer", "compensation": 80000, "workload": Workload.fulltime, "worker_id": 4},
+                {"title": "UI/UX Designer", "compensation": 110000, "workload": Workload.fulltime, "worker_id": 5},
+            ]
+            insert_workes = insert(WorkersOrm).values(workers)
+            insert_resumes = insert(ResumesOrm).values(resumes)
+            session.execute(insert_workes)
+            session.execute(insert_resumes)
+            session.commit()
+
+    @staticmethod
+    def join_cte_subquery_window_func(like_language: str = "Python"):
+        with session_factory() as session:
+            """
+            WITH helper2 AS (
+                SELECT *, compensation-avg_workload_compensation AS compensation_diff
+                FROM
+                (SELECT
+                    w.id,
+                    w.username,
+                    r.compensation,
+                    r.workload,
+                    avg(r.compensation) OVER (PARTITION BY workload)::int AS avg_workload_compensation
+                
+                FROM resumes r
+                JOIN workers w ON r.worker_id = w.id) helper1
+            )
+
+            SELECT * FROM helper2
+            """
+            r = aliased(ResumesOrm)
+            w = aliased(WorkersOrm)
+            subq = (
+                select(
+                    r,
+                    w,
+                    func.avg(r.compensation).over(partition_by=r.workload).cast(Integer).label("avg_workload_compensation"),
+                )
+                #.select_from(r)
+                .join(r, r.worker_id == w.id).subquery("helper1")
+            )
+
+            cte = (
+                select(
+                    subq.c.worker_id,
+                    subq.c.username,
+                    subq.c.compensation,
+                    subq.c.workload,
+                    subq.c.avg_workload_compensation,
+                    (subq.c.compensation - subq.c.avg_workload_compensation).label("compensation_diff"),
+                )
+                .cte("helper2")
+            )
+            query = (
+                select(cte)
+                .order_by(cte.c.compensation_diff.desc())
+            )
+
+            res = session.execute(query)
+            result = res.all()
+            print(f"\nРезультат:\n{result}")
+
+            #print(query.compile(compile_kwargs={"literal_binds": True}))
+
+    @staticmethod
+    def select_workers_with_lazy_relationship():
+        with session_factory() as session:
+            query = (
+                select(WorkersOrm)
+            )
+            res = session.execute(query)
+            result = res.scalars().all()
+
+            print("\n\n     vvv     select_workers_with_lazy_relationship       vvv     \n\n")
+            worker_1_resumes = result[0].resumes
+            print("\n", worker_1_resumes)
+
+            worker_2_resumes = result[1].resumes
+            print("\n", worker_2_resumes)
+
+    @staticmethod
+    def select_workers_with_join_relationship():
+        """
+        Many-to-one, one-to-one 
+        """
+        with session_factory() as session:
+            query = (
+                select(WorkersOrm)
+                .options(joinedload(WorkersOrm.resumes))
+            )
+            res = session.execute(query)
+            result = res.unique().scalars().all()
+
+            print("\n\n     vvv     select_workers_with_join_relationship       vvv     \n\n")
+            worker_1_resumes = result[0].resumes
+            print("\n", worker_1_resumes)
+
+            worker_2_resumes = result[1].resumes
+            print("\n", worker_2_resumes)
+
+    @staticmethod
+    def select_workers_with_selectin_relationship():
+        """
+        One-to-many, many-to-many
+        """
+        with session_factory() as session:
+            query = (
+                select(WorkersOrm)
+                .options(joinedload(WorkersOrm.resumes))
+            )
+            res = session.execute(query)
+            result = res.unique().scalars().all()
+
+            print("\n\n     vvv     select_workers_with_selectin_relationship       vvv     \n\n")
+            worker_1_resumes = result[0].resumes
+            print("\n", worker_1_resumes)
+
+            worker_2_resumes = result[1].resumes
+            print("\n", worker_2_resumes)
+
+    @staticmethod
+    def select_workers_with_condition_relationship():
+        with session_factory() as session:
+            query = (
+                select(WorkersOrm)
+                .options(selectinload(WorkersOrm.resumes_parttime))
+            # если хочется подгрузить несколько relationship'ов, то нужно прописать несколько .options
+            )
+            
+            res = session.execute(query)
+            result = res.scalars().all()
+
+            print("\n\n     vvv     select_workers_with_condition_relationship       vvv     \n\n")
+            print(result)
+
+    @staticmethod
+    def select_workers_with_condition_relationship_contains_eager():
+        with session_factory() as session:
+            query = (
+                select(WorkersOrm)
+                .join(WorkersOrm.resumes)
+                .options(contains_eager(WorkersOrm.resumes))
+                .filter(ResumesOrm.workload == "parttime")
+
+            )
+            
+            res = session.execute(query)
+            result = res.unique().scalars().all()
+
+            print("\n\n     vvv     select_workers_with_condition_relationship_contains_eager       vvv     \n\n")
+            print(result)
+
+    @staticmethod
+    def select_workers_with_relationship_contains_eager_with_limit():
+        with session_factory() as session:
+            subq = (
+                select(ResumesOrm.id.label("parttime_resume_id"))
+                .filter(ResumesOrm.worker_id == WorkersOrm.id)
+                .order_by(WorkersOrm.id.desc())
+                .limit(2)
+                .scalar_subquery()
+                .correlate(WorkersOrm)
+            )
+
+            query = (
+                select(WorkersOrm)
+                .join(ResumesOrm, ResumesOrm.id.in_(subq))
+                .options(contains_eager(WorkersOrm.resumes))
+            )
+
+            res = session.execute(query)
+            result = res.unique().scalars().all()
+
+            print("\n\n     vvv     select_workers_with_relationship_contains_eager_with_limit       vvv     \n\n")
+            print(result)

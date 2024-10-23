@@ -6,3 +6,5 @@
 
 Подробно:
 https://translated.turbopages.org/proxy_u/en-ru.ru.7af838a7-671153fa-65cf1ff5-74722d776562/https/www.geeksforgeeks.org/what-is-the-difference-between-sqlalchemy-core-and-orm/
+
+В SQLAlchemy функция relationship() используется для определения связей между таблицами в базе данных. Это позволяет SQLAlchemy автоматически загружать связанные данные при запросе данных из таблицы.
